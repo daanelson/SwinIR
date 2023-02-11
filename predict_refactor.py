@@ -20,7 +20,7 @@ class Predictor(BasePredictor):
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-                # larger model size; use '3conv' to save parameters and memory; use ema for GAN training
+        # larger model size; use '3conv' to save parameters and memory; use ema for GAN training
         self.scale = 4
         self.window_size = 8
         self.model = SwinIR(upscale=self.scale, in_chans=3, img_size=64, window_size=self.window_size,
