@@ -42,6 +42,7 @@ class Predictor(BasePredictor):
 
         # set input folder
         input_dir = "input_cog_temp"
+        print(f'Initial memory usage: {torch.cuda.memory_allocated() / 1024 ** 3:.2f}GB')
 
         try:
             os.makedirs(input_dir, exist_ok=True)
@@ -55,20 +56,21 @@ class Predictor(BasePredictor):
             # psnr, ssim, psnr_y, ssim_y, psnr_b = 0, 0, 0, 0, 0
             out_path = Path(tempfile.mkdtemp()) / "out.png"
 
-            for _, path in enumerate(sorted(glob.glob(os.path.join(input_dir, "*")))):
-                # read image
-                img_lq = cv2.imread(path, cv2.IMREAD_COLOR).astype(np.float32) / 255.
 
-                img_lq = np.transpose(
-                    img_lq if img_lq.shape[2] == 1 else img_lq[:, :, [2, 1, 0]],
-                    (2, 0, 1),
-                )  # HCW-BGR to CHW-RGB
-                img_lq = (
-                    torch.from_numpy(img_lq).float().unsqueeze(0).to(self.device)
-                )  # CHW-RGB to NCHW-RGB
+            # inference
+            with torch.inference_mode():
 
-                # inference
-                with torch.no_grad():
+                for _, path in enumerate(sorted(glob.glob(os.path.join(input_dir, "*")))):
+                    # read image
+                    img_lq = cv2.imread(path, cv2.IMREAD_COLOR).astype(np.float32) / 255.
+
+                    img_lq = np.transpose(
+                        img_lq if img_lq.shape[2] == 1 else img_lq[:, :, [2, 1, 0]],
+                        (2, 0, 1),
+                    )  # HCW-BGR to CHW-RGB
+                    img_lq = (
+                        torch.from_numpy(img_lq).float().unsqueeze(0).to(self.device)
+                    )  # CHW-RGB to NCHW-RGB
                     # pad input image to be a multiple of window_size
                     _, _, h_old, w_old = img_lq.size()
                     h_pad = (h_old // window_size + 1) * window_size - h_old
@@ -84,14 +86,18 @@ class Predictor(BasePredictor):
                         ..., : h_old * self.scale, : w_old * self.scale
                     ]
 
-                # save image
-                output = output.data.squeeze().float().cpu().clamp_(0, 1).numpy()
-                if output.ndim == 3:
-                    output = np.transpose(
-                        output[[2, 1, 0], :, :], (1, 2, 0)
-                    )  # CHW-RGB to HCW-BGR
-                output = (output * 255.0).round().astype(np.uint8)  # float32 to uint8
-                cv2.imwrite(str(out_path), output)
+                    # save image
+                    output = output.data.squeeze().float().cpu().clamp_(0, 1).numpy()
+                    if output.ndim == 3:
+                        output = np.transpose(
+                            output[[2, 1, 0], :, :], (1, 2, 0)
+                        )  # CHW-RGB to HCW-BGR
+                    output = (output * 255.0).round().astype(np.uint8)  # float32 to uint8
+                    cv2.imwrite(str(out_path), output)
+        except RuntimeError as e:
+            print('CUDA OOM Exception: ', e)
+            raise e
         finally:
+            print(f'Final memory usage: {torch.cuda.memory_allocated() / 1024 ** 3:.2f}GB')
             shutil.rmtree(input_dir)
         return out_path
