@@ -10,7 +10,6 @@ from cog import BasePredictor, Input, Path
 from main_test_swinir import define_model, setup, get_image_pair
 from models.network_swinir import SwinIR
 
-# TODO: download model, build cog image, test.
 
 class Predictor(BasePredictor):
     def setup(self):
@@ -42,7 +41,6 @@ class Predictor(BasePredictor):
 
         # set input folder
         input_dir = "input_cog_temp"
-        print(f'Initial memory usage: {torch.cuda.memory_allocated() / 1024 ** 3:.2f}GB')
 
         try:
             os.makedirs(input_dir, exist_ok=True)
@@ -56,9 +54,9 @@ class Predictor(BasePredictor):
             # psnr, ssim, psnr_y, ssim_y, psnr_b = 0, 0, 0, 0, 0
             out_path = Path(tempfile.mkdtemp()) / "out.png"
 
-
+            img_lq = None
             # inference
-            with torch.inference_mode():
+            with torch.no_grad():
 
                 for _, path in enumerate(sorted(glob.glob(os.path.join(input_dir, "*")))):
                     # read image
@@ -95,9 +93,10 @@ class Predictor(BasePredictor):
                     output = (output * 255.0).round().astype(np.uint8)  # float32 to uint8
                     cv2.imwrite(str(out_path), output)
         except RuntimeError as e:
-            print('CUDA OOM Exception: ', e)
+            if type(e) == torch.cuda.OutOfMemoryError:
+                print("""CUDA OOM - this generally happens for RGB images where width * height > 2.05 million pixels""")
+                self.setup()
             raise e
         finally:
-            print(f'Final memory usage: {torch.cuda.memory_allocated() / 1024 ** 3:.2f}GB')
             shutil.rmtree(input_dir)
         return out_path
