@@ -10,6 +10,8 @@ from cog import BasePredictor, Input, Path
 from main_test_swinir import define_model, setup, get_image_pair
 from models.network_swinir import SwinIR
 
+# RGB images larger than this throw OOM errors
+MAX_PIXELS = 2050000
 
 class Predictor(BasePredictor):
     def setup(self):
@@ -61,6 +63,9 @@ class Predictor(BasePredictor):
                 for _, path in enumerate(sorted(glob.glob(os.path.join(input_dir, "*")))):
                     # read image
                     img_lq = cv2.imread(path, cv2.IMREAD_COLOR).astype(np.float32) / 255.
+                    
+                    if img_lq.shape[0] * img_lq.shape[1] > MAX_PIXELS and img_lq.shape[2] > 1:
+                        raise ValueError("Input RGB image has dimensions width * height > 2.05 million. This will OOM, pass in smaller images")
 
                     img_lq = np.transpose(
                         img_lq if img_lq.shape[2] == 1 else img_lq[:, :, [2, 1, 0]],
